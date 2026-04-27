@@ -1,48 +1,71 @@
-"""Pydantic schemas for PetOrbit API"""
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from enum import Enum
-import uuid
-from datetime import datetime
+from pydantic import BaseModel
+from typing import Optional
+
+
+class OrbitMode(str, Enum):
+    """
+    static_orbit  – 高清靜態環繞
+                    輸入: 短影片 (3-10s, 繞頭部前半圓)
+                    輸出: 72 幀 Sprite Atlas (9×8), 無時間軸
+                    視角: 水平 ±90°
+                    適合: 3D 模型感的展示、商品頁
+
+    live_orbit    – 動態頭部跟隨 (主打功能)
+                    輸入: 5-20s 自然動作影片
+                    輸出: 複合資產包:
+                          · 36 個角度 × N 時間幀 的幀序列 (angle_grid)
+                          · 自動偵測「頭部追蹤瞬間」highlight 段落
+                          · 毛髮/動態 mask 資訊 (fur_mask_frames)
+                    Viewer 行為:
+                          · 陀螺儀/滑鼠控制水平視角 (azimuth)
+                          · 同時播放時間軸動畫 (呼吸、毛髮飄動、眨眼)
+                          · 「頭部始終對著畫面」鎖定模式
+    """
+    static_orbit = "static_orbit"
+    live_orbit   = "live_orbit"
 
 
 class JobStatus(str, Enum):
-    PENDING = "pending"
-    EXTRACTING = "extracting"
-    GENERATING = "generating"
-    INTERPOLATING = "interpolating"
-    PACKAGING = "packaging"
-    DONE = "done"
-    FAILED = "failed"
+    queued      = "queued"
+    extracting  = "extracting"
+    uploading   = "uploading"
+    generating  = "generating"
+    packaging   = "packaging"
+    done        = "done"
+    failed      = "failed"
 
 
-class CreateJobRequest(BaseModel):
-    user_id: str = Field(..., description="User identifier")
-    credit_token: str = Field(..., description="Pre-authorized credit token from IAP")
-    output_frames: int = Field(default=72, ge=24, le=120, description="Target frame count")
-    angle_range: int = Field(default=85, ge=45, le=90, description="Max rotation angle (degrees)")
+STATUS_LABEL = {
+    JobStatus.queued:     "排隊中…",
+    JobStatus.extracting: "抽取影格中…",
+    JobStatus.uploading:  "上傳素材中…",
+    JobStatus.generating: "AI 生成多視角中…",
+    JobStatus.packaging:  "打包互動資產中…",
+    JobStatus.done:       "完成！",
+    JobStatus.failed:     "失敗，請重試",
+}
 
 
-class JobResponse(BaseModel):
+class JobCreateResponse(BaseModel):
     job_id: str
+    mode:   OrbitMode
     status: JobStatus
-    created_at: datetime
-    estimated_seconds: int
+    credits_used: int
 
 
-class FrameManifest(BaseModel):
-    angle: float
-    url: str
-    width: int
-    height: int
-
-
-class ResultResponse(BaseModel):
-    job_id: str
-    status: JobStatus
-    frames: Optional[List[FrameManifest]] = None
-    spritesheet_url: Optional[str] = None
-    spritesheet_cols: Optional[int] = None
-    video_url: Optional[str] = None
-    viewer_url: Optional[str] = None
-    error: Optional[str] = None
+class JobResultResponse(BaseModel):
+    job_id:       str
+    status:       JobStatus
+    status_label: str
+    mode:         Optional[OrbitMode] = None
+    # static_orbit assets
+    sprite_url:   Optional[str] = None
+    manifest_url: Optional[str] = None
+    # live_orbit assets
+    angle_grid_url:     Optional[str] = None   # angle_grid/{azimuth_idx}/{frame_idx}.jpg
+    highlight_clip_url: Optional[str] = None   # 最佳「頭部跟隨」highlight 短片
+    fur_mask_url:       Optional[str] = None   # 毛髮遮罩 JSON
+    # shared
+    viewer_url:   Optional[str] = None
+    error:        Optional[str] = None

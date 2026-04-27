@@ -1,51 +1,67 @@
-"""Pack dense frame sequence into a sprite atlas for efficient Web viewer delivery."""
-from typing import List, Tuple
-import math
+"""spritesheet.py  –  Static Orbit 專用 Sprite Atlas 打包器
+
+輸出: 9×8 = 72 幀的 sprite PNG + manifest JSON
+每幀 512×512, atlas 總尺寸 4608×4096
+"""
+import asyncio, httpx, io, json
+from PIL import Image
+from backend.services.r2_client import upload_bytes
+
+COLS, ROWS = 9, 8
+FRAME_W = FRAME_H = 512
 
 
-def pack_spritesheet(
-    frame_paths: List[str],
-    output_path: str,
-    frame_size: Tuple[int, int] = (512, 512),
-    cols: int = 9,
-) -> dict:
-    """
-    Combine N frames into a single sprite sheet image.
-    Returns metadata dict for the viewer.
+async def build_sprite(job_id: str, nvs_result: dict) -> dict:
+    urls = nvs_result.get("output_urls", [])
+    if not urls:
+        raise ValueError("NVS 未回傳任何圖片")
 
-    Args:
-        frame_paths: Ordered list of frame image paths
-        output_path: Where to write the spritesheet (e.g. /tmp/sprite.webp)
-        frame_size: (width, height) per frame in pixels
-        cols: Number of columns in the grid
+    # 下載所有幀
+    frames = await _download_frames(urls[:COLS * ROWS])
 
-    Returns:
-        {
-          "url": output_path,
-          "cols": cols,
-          "rows": rows,
-          "frame_w": frame_size[0],
-          "frame_h": frame_size[1],
-          "total_frames": len(frame_paths),
-        }
+    # 拼 Atlas
+    atlas = Image.new("RGB", (COLS * FRAME_W, ROWS * FRAME_H))
+    for idx, img in enumerate(frames):
+        col = idx % COLS
+        row = idx // COLS
+        img_resized = img.resize((FRAME_W, FRAME_H), Image.LANCZOS)
+        atlas.paste(img_resized, (col * FRAME_W, row * FRAME_H))
 
-    Production implementation:
-        from PIL import Image
-        rows = math.ceil(len(frame_paths) / cols)
-        atlas = Image.new('RGB', (cols * frame_size[0], rows * frame_size[1]))
-        for idx, path in enumerate(frame_paths):
-            img = Image.open(path).resize(frame_size)
-            x = (idx % cols) * frame_size[0]
-            y = (idx // cols) * frame_size[1]
-            atlas.paste(img, (x, y))
-        atlas.save(output_path, 'WEBP', quality=85)
-    """
-    rows = math.ceil(len(frame_paths) / cols)
-    return {
-        "url": output_path,
-        "cols": cols,
-        "rows": rows,
-        "frame_w": frame_size[0],
-        "frame_h": frame_size[1],
-        "total_frames": len(frame_paths),
+    # 上傳 Atlas PNG
+    buf = io.BytesIO()
+    atlas.save(buf, format="PNG", optimize=True)
+    sprite_url = await upload_bytes(
+        key=f"results/{job_id}/sprite_atlas.png",
+        data=buf.getvalue(),
+        content_type="image/png",
+    )
+
+    # 上傳 Manifest JSON
+    manifest = {
+        "mode":    "static_orbit",
+        "job_id":  job_id,
+        "cols":    COLS,
+        "rows":    ROWS,
+        "total":   len(frames),
+        "frame_w": FRAME_W,
+        "frame_h": FRAME_H,
+        "sprite":  sprite_url,
     }
+    manifest_url = await upload_bytes(
+        key=f"results/{job_id}/manifest.json",
+        data=json.dumps(manifest).encode(),
+        content_type="application/json",
+    )
+
+    return {"sprite_url": sprite_url, "manifest_url": manifest_url}
+
+
+async def _download_frames(urls: list[str]) -> list[Image.Image]:
+    async with httpx.AsyncClient(timeout=60) as cli:
+        tasks = [cli.get(u) for u in urls]
+        responses = await asyncio.gather(*tasks)
+    imgs = []
+    for r in responses:
+        if r.status_code == 200:
+            imgs.append(Image.open(io.BytesIO(r.content)).convert("RGB"))
+    return imgs

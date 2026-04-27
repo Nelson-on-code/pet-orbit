@@ -1,41 +1,28 @@
-"""GET /api/results/{job_id} — poll job status and retrieve result"""
 from fastapi import APIRouter, HTTPException
-from models import ResultResponse, JobStatus, FrameManifest
-import math
+from backend.models import JobResultResponse, JobStatus, STATUS_LABEL
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["results"])
 
-# In production: replace with Redis/DB lookup
-_MOCK_JOBS: dict = {}
+# job_store 由 queue_worker 維護；生產環境用 Redis hash
+from backend.queue_worker import job_store
 
 
-@router.get("/results/{job_id}", response_model=ResultResponse, summary="Poll job result")
-def get_result(job_id: str):
-    """
-    Returns current job status.
-    When status == 'done', includes:
-    - frames: list of {angle, url} for the interactive viewer
-    - spritesheet_url: packed sprite atlas
-    - video_url: MP4 orbit video for social export
-    - viewer_url: shareable web viewer URL
-    """
-    # Mock: return a completed result for any job_id
-    # Replace with real DB/Redis lookup
-    frames = [
-        FrameManifest(
-            angle=round(-85 + i * (170 / 71), 2),
-            url=f"https://cdn.petorbit.com/jobs/{job_id}/frame_{i:03d}.webp",
-            width=512,
-            height=512,
-        )
-        for i in range(72)
-    ]
-    return ResultResponse(
+@router.get("/results/{job_id}", response_model=JobResultResponse)
+async def get_result(job_id: str):
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} 不存在")
+
+    return JobResultResponse(
         job_id=job_id,
-        status=JobStatus.DONE,
-        frames=frames,
-        spritesheet_url=f"https://cdn.petorbit.com/jobs/{job_id}/spritesheet.webp",
-        spritesheet_cols=9,
-        video_url=f"https://cdn.petorbit.com/jobs/{job_id}/orbit.mp4",
-        viewer_url=f"https://petorbit.com/v/{job_id}",
+        status=job["status"],
+        status_label=STATUS_LABEL.get(job["status"], ""),
+        mode=job.get("mode"),
+        sprite_url=job.get("sprite_url"),
+        manifest_url=job.get("manifest_url"),
+        angle_grid_url=job.get("angle_grid_url"),
+        highlight_clip_url=job.get("highlight_clip_url"),
+        fur_mask_url=job.get("fur_mask_url"),
+        viewer_url=job.get("viewer_url"),
+        error=job.get("error"),
     )

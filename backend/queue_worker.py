@@ -1,68 +1,67 @@
-"""Background job worker — orchestrates the full generation pipeline."""
-import time
-from services.frame_extractor import extract_frames
-from services.nvs_client import get_nvs_client
-from services.interpolator import interpolate_frames
-from services.spritesheet import pack_spritesheet
+"""queue_worker.py
+
+輕量版 in-process worker（開發用）
+生產環境請改用 Zeabur Cron / Redis Queue / Celery。
+"""
+import asyncio, os, tempfile, pathlib
+from backend.models import OrbitMode, JobStatus
+
+job_store: dict = {}  # { job_id: { status, mode, ... } }
 
 
-def enqueue_job(job: dict) -> None:
-    """
-    Stub enqueue. In production:
-        from rq import Queue
-        from redis import Redis
-        q = Queue(connection=Redis())
-        q.enqueue(process_job, job)
-    """
-    # For demo: just print
-    print(f"[queue] Enqueued job {job['job_id']}")
+async def enqueue_job(
+    job_id: str,
+    video_bytes: bytes,
+    filename: str,
+    mode: OrbitMode,
+):
+    job_store[job_id] = {"status": JobStatus.queued, "mode": mode}
+    asyncio.create_task(_process(job_id, video_bytes, filename, mode))
 
 
-def process_job(job: dict) -> None:
-    """
-    Full generation pipeline executed by a worker process.
+async def _process(job_id, video_bytes, filename, mode):
+    store = job_store[job_id]
+    try:
+        # 1. 寫入臨時檔
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = pathlib.Path(tmpdir) / filename
+            video_path.write_bytes(video_bytes)
 
-    Steps:
-    1. Extract key frames from video
-    2. Run NVS model to generate sparse angle views (12–36 frames)
-    3. Interpolate to dense sequence (72 frames)
-    4. Pack into spritesheet
-    5. Upload to CDN (S3 / GCS)
-    6. Update job status in DB/Redis
-    7. Optionally render orbit video (ffmpeg)
-    """
-    job_id = job["job_id"]
-    output_frames = job.get("output_frames", 72)
-    angle_range = job.get("angle_range", 85)
+            # 2. 抽幀
+            store["status"] = JobStatus.extracting
+            from backend.services.frame_extractor import extract_frames
+            frames = await asyncio.to_thread(
+                extract_frames, str(video_path), tmpdir, mode
+            )
 
-    print(f"[worker] Starting job {job_id}")
+            # 3. 上傳原始幀到 R2
+            store["status"] = JobStatus.uploading
+            from backend.services.r2_client import upload_frames
+            frame_urls = await upload_frames(job_id, frames)
 
-    # Step 1: Extract frames
-    key_frames = extract_frames(
-        video_bytes=job["content"],
-        filename=job["filename"],
-        target_frames=12,
-    )
-    print(f"[worker] Extracted {len(key_frames)} key frames")
+            # 4. 呼叫 NVS API
+            store["status"] = JobStatus.generating
+            from backend.services.nvs_client import generate_views
+            nvs_result = await generate_views(job_id, frame_urls, mode)
 
-    # Step 2: NVS generation
-    target_angles = [
-        round(-angle_range + i * (2 * angle_range / 35), 1)
-        for i in range(36)
-    ]
-    nvs = get_nvs_client()
-    generated = nvs.generate_views(key_frames, target_angles, job_id)
-    print(f"[worker] Generated {len(generated)} NVS frames")
+            # 5. 打包資產
+            store["status"] = JobStatus.packaging
+            if mode == OrbitMode.static_orbit:
+                from backend.services.spritesheet import build_sprite
+                assets = await build_sprite(job_id, nvs_result)
+                store.update(assets)
+            else:  # live_orbit
+                from backend.services.live_packager import build_live_assets
+                assets = await build_live_assets(job_id, nvs_result)
+                store.update(assets)
 
-    # Step 3: Interpolate to dense sequence
-    sparse = list(zip(target_angles, generated))
-    dense = interpolate_frames(sparse, target_count=output_frames)
-    print(f"[worker] Interpolated to {len(dense)} frames")
+            # 6. 生成 viewer HTML
+            from backend.services.viewer_builder import build_viewer
+            viewer_url = await build_viewer(job_id, mode, store)
+            store["viewer_url"] = viewer_url
+            store["status"] = JobStatus.done
 
-    # Step 4: Pack spritesheet
-    frame_paths = [f for _, f in dense]
-    meta = pack_spritesheet(frame_paths, f"/tmp/{job_id}_sprite.webp")
-    print(f"[worker] Spritesheet: {meta}")
-
-    # Step 5–7: Upload to CDN + update job status (stub)
-    print(f"[worker] Job {job_id} complete")
+    except Exception as exc:
+        store["status"] = JobStatus.failed
+        store["error"]  = str(exc)
+        raise
