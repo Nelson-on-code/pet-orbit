@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PetOrbit Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-bg: #0d0d0f;
+      --color-surface: #141416;
+      --color-border: oklch(1 0 0 / 0.08);
+      --color-text: #e8e8ea;
+      --color-text-muted: #72727a;
+      --color-primary: #a78bfa;
+      --font-body: 'Inter', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100dvh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 1rem;
+      user-select: none;
+    }
+    .viewer-wrap {
+      width: min(500px, 100%);
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    }
+    .viewer-title {
+      font-size: 1rem; font-weight: 600;
+      color: var(--color-text-muted);
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .canvas-wrap {
+      position: relative; width: 100%;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 1.5rem;
+      overflow: hidden;
+    }
+    canvas {
+      display: block; width: 100%; aspect-ratio: 1/1; cursor: ew-resize;
+    }
+    .overlay-hint {
+      position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
+      background: oklch(0 0 0 / 0.65); backdrop-filter: blur(8px);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-muted); border-radius: 99px;
+      padding: 0.35rem 1rem; font-size: 0.8rem;
+      transition: opacity 0.4s;
+      pointer-events: none; white-space: nowrap;
+    }
+    .angle-display {
+      font-size: 1.5rem; font-weight: 700;
+      color: var(--color-primary); font-variant-numeric: tabular-nums;
+    }
+    .back-link {
+      color: var(--color-text-muted); text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: var(--color-text); }
+    /* Upload section */
+    .upload-section {
+      width: 100%;
+      border: 2px dashed var(--color-border);
+      border-radius: 1rem;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-section:hover { border-color: var(--color-primary); background: oklch(0.65 0.25 280 / 0.06); }
+    .upload-section p { color: var(--color-text-muted); font-size: 0.875rem; margin-top: 0.5rem; }
+    .upload-btn {
+      background: var(--color-primary); color: #0d0d0f;
+      padding: 0.5rem 1.5rem; border-radius: 99px;
+      border: none; font-weight: 700; cursor: pointer;
+      font-size: 0.875rem; margin-top: 1rem;
+      transition: opacity 0.2s;
+    }
+    .upload-btn:hover { opacity: 0.85; }
+    .status-bar {
+      width: 100%; background: var(--color-surface);
+      border: 1px solid var(--color-border); border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      font-size: 0.875rem; color: var(--color-text-muted);
+      display: none;
+    }
+    .status-bar.active { display: flex; align-items: center; gap: 0.75rem; }
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid var(--color-border);
+      border-top-color: var(--color-primary); border-radius: 50%;
+      animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="viewer-wrap">
+  <a href="index.html" class="back-link">← Back to PetOrbit</a>
+  <div class="viewer-title">🐾 Interactive Viewer</div>
+
+  <div class="canvas-wrap">
+    <canvas id="mainCanvas" width="500" height="500" aria-label="Interactive pet head orbit viewer"></canvas>
+    <div class="overlay-hint" id="hint">← Drag or tilt to rotate →</div>
+  </div>
+
+  <div class="angle-display" id="angleDisplay">0°</div>
+
+  <!-- Upload section (demo UI — wires to API in production) -->
+  <div class="upload-section" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" style="margin:0 auto 0.5rem">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    <strong>Upload pet video or photos</strong>
+    <p>Recommended: 5–10s video, front + ±45° sweep<br>MP4, MOV, JPG, PNG accepted</p>
+    <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">Choose file</button>
+    <input type="file" id="fileInput" accept="video/*,image/*" style="display:none" onchange="handleUpload(event)">
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <div class="spinner"></div>
+    <span id="statusText">Extracting frames…</span>
+  </div>
+</div>
+
+<script>
+// ---- Interactive Viewer (same as landing, extended) ----
+(function() {
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  const hint = document.getElementById('hint');
+  const angleDisplay = document.getElementById('angleDisplay');
+  let currentAngle = 0, targetAngle = 0;
+  let isDragging = false, lastX = 0;
+
+  function drawFrame(angle) {
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#1a1a1e';
+    ctx.fillRect(0, 0, w, h);
+
+    const vignette = ctx.createRadialGradient(w/2, h/2, h*0.2, w/2, h/2, h*0.75);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+
+    const rad = angle * Math.PI / 180;
+    const cx = w/2, cy = h/2;
+    const squash = 1 - Math.abs(Math.sin(rad)) * 0.15;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.shadowColor = 'rgba(167,139,250,0.2)';
+    ctx.shadowBlur = 50;
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 120 * squash, 130, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#c0956a';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const earOffsetX = 95 * squash;
+    ctx.beginPath();
+    ctx.ellipse(-earOffsetX, -70, 25, 40, -0.4, 0, Math.PI*2);
+    ctx.fillStyle = '#a07850';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(earOffsetX, -70, 25, 40, 0.4, 0, Math.PI*2);
+    ctx.fill();
+
+    const eyeShift = Math.sin(rad) * 30;
+    const leftEyeScale = Math.max(0.2, 1 - Math.abs(Math.sin(rad)) * 0.6);
+    const rightEyeScale = Math.max(0.05, 1 - Math.abs(Math.sin(rad)) * 0.85);
+
+    ctx.beginPath();
+    ctx.ellipse(-38 + eyeShift * 0.5, -20, 18 * leftEyeScale, 20, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#1a0a00';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-34 + eyeShift * 0.5, -25, 4 * leftEyeScale, 4, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(38 + eyeShift * 0.5, -20, 18 * rightEyeScale, 20, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#1a0a00';
+    ctx.fill();
+    if (rightEyeScale > 0.2) {
+      ctx.beginPath();
+      ctx.ellipse(42 + eyeShift * 0.5, -25, 4 * rightEyeScale, 4, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fill();
+    }
+
+    const noseX = Math.sin(rad) * 20;
+    ctx.beginPath();
+    ctx.ellipse(noseX, 20, 18, 12, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#8b4513';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(noseX - 6, 22, 5, 4, -0.2, 0, Math.PI*2);
+    ctx.fillStyle = '#3d1f00';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(noseX + 6, 22, 5, 4, 0.2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+    ctx.fillStyle = 'rgba(167,139,250,0.5)';
+    ctx.font = '13px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(angle) + '°', canvas.width - 16, canvas.height - 14);
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function animate() {
+    currentAngle = lerp(currentAngle, targetAngle, 0.12);
+    drawFrame(currentAngle);
+    angleDisplay.textContent = Math.round(currentAngle) + '°';
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  canvas.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; hint.style.opacity = '0'; });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    targetAngle = Math.max(-85, Math.min(85, targetAngle + (e.clientX - lastX) * 0.5));
+    lastX = e.clientX;
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+  canvas.addEventListener('touchstart', e => { isDragging = true; lastX = e.touches[0].clientX; hint.style.opacity = '0'; }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    targetAngle = Math.max(-85, Math.min(85, targetAngle + (e.touches[0].clientX - lastX) * 0.5));
+    lastX = e.touches[0].clientX;
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => { isDragging = false; });
+
+  function requestGyro() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(s => {
+        if (s === 'granted') startGyro();
+      }).catch(() => {});
+    } else { startGyro(); }
+  }
+  function startGyro() {
+    window.addEventListener('deviceorientation', e => {
+      if (e.gamma == null) return;
+      if (!isDragging) targetAngle = Math.max(-85, Math.min(85, e.gamma));
+    });
+  }
+  canvas.addEventListener('touchstart', requestGyro, { once: true });
+})();
+
+// ---- Upload handler (demo — wires to POST /api/jobs in production) ----
+function handleUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const statusBar = document.getElementById('statusBar');
+  const statusText = document.getElementById('statusText');
+  const uploadZone = document.getElementById('uploadZone');
+  uploadZone.style.opacity = '0.4';
+  statusBar.classList.add('active');
+
+  const steps = [
+    { t: 500, msg: 'Extracting key frames…' },
+    { t: 1800, msg: 'Sending to AI generation pipeline…' },
+    { t: 3500, msg: 'Generating 36 angle views (NVS model)…' },
+    { t: 6000, msg: 'Interpolating to 72 frames…' },
+    { t: 8000, msg: 'Building spritesheet…' },
+    { t: 9500, msg: '✅ Done! Orbit ready.' },
+  ];
+  steps.forEach(s => {
+    setTimeout(() => {
+      statusText.textContent = s.msg;
+      if (s.msg.startsWith('✅')) {
+        setTimeout(() => { statusBar.classList.remove('active'); uploadZone.style.opacity = '1'; }, 1800);
+      }
+    }, s.t);
+  });
+}
+</script>
+</body>
+</html>

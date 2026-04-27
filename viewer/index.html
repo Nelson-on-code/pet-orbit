@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PetOrbit — Interactive Pet Head Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=Syne:wght@400..800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-bg: #0d0d0f;
+      --color-surface: #141416;
+      --color-surface-2: #1a1a1e;
+      --color-border: oklch(1 0 0 / 0.08);
+      --color-text: #e8e8ea;
+      --color-text-muted: #72727a;
+      --color-primary: #a78bfa;
+      --color-primary-glow: oklch(0.65 0.25 280 / 0.3);
+      --color-accent: #f472b6;
+      --font-display: 'Syne', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --radius-md: 0.75rem;
+      --radius-lg: 1.25rem;
+      --radius-xl: 2rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+      --space-12: 3rem;
+      --space-16: 4rem;
+      --space-20: 5rem;
+      --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+      --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+      --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+      --text-2xl: clamp(2rem, 1.2rem + 2.5vw, 3.5rem);
+      --text-hero: clamp(3rem, 0.5rem + 7vw, 7rem);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100dvh;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-4) var(--space-6);
+      background: oklch(0.08 0 0 / 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: var(--space-2);
+      font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700;
+      color: var(--color-text); text-decoration: none;
+    }
+    .nav-logo svg { color: var(--color-primary); }
+    .nav-cta {
+      background: var(--color-primary); color: #0d0d0f;
+      padding: 0.5rem 1.25rem; border-radius: var(--radius-xl);
+      font-weight: 600; font-size: var(--text-sm); text-decoration: none;
+      transition: opacity 180ms ease;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* HERO */
+    .hero {
+      min-height: 100dvh;
+      display: grid; place-items: center;
+      padding: var(--space-20) var(--space-6) var(--space-16);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 30% 40%, oklch(0.55 0.25 280 / 0.15) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 70% 60%, oklch(0.55 0.2 330 / 0.12) 0%, transparent 70%);
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 780px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      background: oklch(0.65 0.25 280 / 0.15);
+      border: 1px solid oklch(0.65 0.25 280 / 0.3);
+      color: var(--color-primary); border-radius: var(--radius-xl);
+      padding: 0.3rem 0.9rem; font-size: var(--text-sm); font-weight: 500;
+      margin-bottom: var(--space-6);
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: var(--text-hero);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: var(--space-6);
+    }
+    .hero h1 span { color: var(--color-primary); }
+    .hero p {
+      font-size: var(--text-lg);
+      color: var(--color-text-muted);
+      max-width: 52ch;
+      margin: 0 auto var(--space-10);
+    }
+    .hero-actions { display: flex; gap: var(--space-4); justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--color-primary); color: #0d0d0f;
+      padding: 0.75rem 2rem; border-radius: var(--radius-xl);
+      font-weight: 700; font-size: var(--text-base); text-decoration: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-secondary {
+      background: transparent; color: var(--color-text);
+      padding: 0.75rem 2rem; border-radius: var(--radius-xl);
+      font-weight: 500; font-size: var(--text-base); text-decoration: none;
+      border: 1px solid var(--color-border);
+      transition: border-color 180ms ease, background 180ms ease;
+    }
+    .btn-secondary:hover { border-color: oklch(1 0 0 / 0.2); background: oklch(1 0 0 / 0.04); }
+
+    /* DEMO VIEWER */
+    .demo-section {
+      padding: var(--space-20) var(--space-6);
+      max-width: 960px; margin: 0 auto;
+      text-align: center;
+    }
+    .section-label {
+      font-size: var(--text-sm); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--color-primary); margin-bottom: var(--space-4);
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl); font-weight: 700;
+      margin-bottom: var(--space-4); line-height: 1.2;
+    }
+    .section-sub {
+      color: var(--color-text-muted); font-size: var(--text-base);
+      max-width: 52ch; margin: 0 auto var(--space-12);
+    }
+    .viewer-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      position: relative;
+    }
+    .viewer-hint {
+      position: absolute; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+      background: oklch(0 0 0 / 0.6); backdrop-filter: blur(8px);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-muted); border-radius: var(--radius-xl);
+      padding: 0.4rem 1rem; font-size: var(--text-sm);
+      pointer-events: none; white-space: nowrap;
+      z-index: 10;
+    }
+    canvas#petCanvas {
+      display: block; width: 100%; cursor: ew-resize;
+      aspect-ratio: 1 / 1; max-height: 500px;
+      object-fit: contain;
+    }
+
+    /* HOW IT WORKS */
+    .how-section {
+      padding: var(--space-20) var(--space-6);
+      max-width: 960px; margin: 0 auto;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+      gap: var(--space-6);
+      margin-top: var(--space-12);
+    }
+    .step-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8) var(--space-6);
+    }
+    .step-num {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: oklch(0.65 0.25 280 / 0.15);
+      border: 1px solid oklch(0.65 0.25 280 / 0.3);
+      color: var(--color-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: var(--text-sm);
+      margin-bottom: var(--space-4);
+    }
+    .step-card h3 {
+      font-family: var(--font-display);
+      font-size: var(--text-base); font-weight: 700;
+      margin-bottom: var(--space-2);
+    }
+    .step-card p { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+    /* PRICING */
+    .pricing-section {
+      padding: var(--space-20) var(--space-6);
+      max-width: 960px; margin: 0 auto;
+      text-align: center;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+      gap: var(--space-4);
+      margin-top: var(--space-12);
+    }
+    .price-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8) var(--space-6);
+      text-align: left;
+    }
+    .price-card.featured {
+      border-color: oklch(0.65 0.25 280 / 0.5);
+      background: oklch(0.65 0.25 280 / 0.08);
+    }
+    .price-tag {
+      font-family: var(--font-display); font-size: var(--text-xl); font-weight: 800;
+      margin: var(--space-3) 0 var(--space-2);
+    }
+    .price-tag span { font-size: var(--text-sm); font-weight: 400; color: var(--color-text-muted); }
+    .price-name { font-weight: 600; font-size: var(--text-sm); color: var(--color-primary); }
+    .price-desc { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-4); }
+    .price-perks { list-style: none; font-size: var(--text-sm); color: var(--color-text-muted); }
+    .price-perks li::before { content: '✓  '; color: var(--color-primary); }
+    .price-perks li + li { margin-top: var(--space-2); }
+    .price-cta {
+      display: block; margin-top: var(--space-6);
+      background: var(--color-primary); color: #0d0d0f;
+      padding: 0.6rem 1.25rem; border-radius: var(--radius-xl);
+      font-weight: 700; font-size: var(--text-sm); text-align: center;
+      text-decoration: none; transition: opacity 180ms ease;
+    }
+    .price-cta:hover { opacity: 0.85; }
+    .price-cta.outline {
+      background: transparent; color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+    .price-cta.outline:hover { border-color: oklch(1 0 0 / 0.3); background: oklch(1 0 0 / 0.04); }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: var(--space-12) var(--space-6);
+      border-top: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+    }
+
+    @media (max-width: 640px) {
+      .hero-actions { flex-direction: column; align-items: center; }
+      .btn-primary, .btn-secondary { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="PetOrbit logo">
+      <circle cx="14" cy="14" r="5" fill="currentColor"/>
+      <ellipse cx="14" cy="14" rx="13" ry="6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/>
+      <circle cx="27" cy="14" r="2" fill="currentColor"/>
+    </svg>
+    PetOrbit
+  </a>
+  <a href="viewer.html" class="nav-cta">Try Demo →</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+      AI Novel View Synthesis
+    </div>
+    <h1>Your pet.<br><span>180° alive.</span></h1>
+    <p>Upload a short video. AI generates every angle. Drag or tilt to see your pet follow you — like magic.</p>
+    <div class="hero-actions">
+      <a href="viewer.html" class="btn-primary">🐾 Try the Demo</a>
+      <a href="#how" class="btn-secondary">How it works</a>
+    </div>
+  </div>
+</section>
+
+<section class="demo-section" id="demo">
+  <div class="section-label">Live Demo</div>
+  <h2 class="section-title">Drag or tilt to rotate</h2>
+  <p class="section-sub">This is a simulated 36-frame sequence. Your generated pet will look even more realistic.</p>
+  <div class="viewer-card">
+    <canvas id="petCanvas" width="500" height="500" aria-label="Interactive pet head viewer"></canvas>
+    <div class="viewer-hint" id="viewerHint">← Drag to rotate →</div>
+  </div>
+</section>
+
+<section class="how-section" id="how">
+  <div class="section-label">How it works</div>
+  <h2 class="section-title" style="font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700;">Four steps to orbit</h2>
+  <div class="steps">
+    <div class="step-card"><div class="step-num">1</div><h3>Capture</h3><p>Record a 5–10 s guided video of your pet — front to ±45° side sweep. App guides you frame by frame.</p></div>
+    <div class="step-card"><div class="step-num">2</div><h3>Generate</h3><p>AI novel view synthesis produces 72 angle-consistent frames. One tap, ~60 seconds.</p></div>
+    <div class="step-card"><div class="step-num">3</div><h3>Interact</h3><p>Drag on desktop or tilt your phone. The correct frame plays instantly — silky smooth at 72 nodes.</p></div>
+    <div class="step-card"><div class="step-num">4</div><h3>Share</h3><p>Share a link. Anyone can orbit your pet. No app install needed on their end.</p></div>
+  </div>
+</section>
+
+<section class="pricing-section" id="pricing">
+  <div class="section-label">Pricing</div>
+  <h2 class="section-title" style="font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700;">Pay per creation</h2>
+  <p class="section-sub">No subscription. Buy credits when you need them. One credit = one AI-generated orbit.</p>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-name">Free</div>
+      <div class="price-tag">$0</div>
+      <div class="price-desc">Try before you buy</div>
+      <ul class="price-perks">
+        <li>1 free generation</li>
+        <li>Low-res preview</li>
+        <li>Watermarked output</li>
+        <li>Web viewer link</li>
+      </ul>
+      <a href="viewer.html" class="price-cta outline">Try free</a>
+    </div>
+    <div class="price-card featured">
+      <div class="price-name">Starter Pack</div>
+      <div class="price-tag">$4.99 <span>/ 3 credits</span></div>
+      <div class="price-desc">Perfect for one pet</div>
+      <ul class="price-perks">
+        <li>3 HD generations</li>
+        <li>No watermark</li>
+        <li>MP4/GIF export</li>
+        <li>Shareable viewer link</li>
+      </ul>
+      <a href="#" class="price-cta">Get Starter</a>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Value Pack</div>
+      <div class="price-tag">$12.99 <span>/ 10 credits</span></div>
+      <div class="price-desc">For the dedicated pet parent</div>
+      <ul class="price-perks">
+        <li>10 HD generations</li>
+        <li>No watermark</li>
+        <li>MP4/GIF export</li>
+        <li>Priority queue</li>
+      </ul>
+      <a href="#" class="price-cta outline">Get Value</a>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Creator Pack</div>
+      <div class="price-tag">$29.99 <span>/ 30 credits</span></div>
+      <div class="price-desc">For KOLs & pet brands</div>
+      <ul class="price-perks">
+        <li>30 HD generations</li>
+        <li>No watermark</li>
+        <li>MP4/GIF export</li>
+        <li>Priority queue</li>
+      </ul>
+      <a href="#" class="price-cta outline">Get Creator</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>🐾 PetOrbit — &copy; 2026. Made with ♥ for pet lovers.</p>
+</footer>
+
+<script>
+// Inline demo viewer on landing page
+(function() {
+  const canvas = document.getElementById('petCanvas');
+  const ctx = canvas.getContext('2d');
+  const hint = document.getElementById('viewerHint');
+  const FRAMES = 36;
+  let currentAngle = 0;
+  let targetAngle = 0;
+  let isDragging = false;
+  let lastX = 0;
+
+  // Generate demo frames procedurally (circles simulating pet head)
+  function drawPetFrame(angle) {
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // BG
+    ctx.fillStyle = '#1a1a1e';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle vignette
+    const vignette = ctx.createRadialGradient(w/2, h/2, h*0.2, w/2, h/2, h*0.75);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+
+    const rad = angle * Math.PI / 180;
+    const cx = w / 2, cy = h / 2;
+
+    // ---- Draw stylised pet head ----
+    // Head (ellipse squashes slightly with rotation)
+    const squash = 1 - Math.abs(Math.sin(rad)) * 0.15;
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Shadow
+    ctx.shadowColor = 'rgba(167,139,250,0.25)';
+    ctx.shadowBlur = 40;
+
+    // Head body
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 120 * squash, 130, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#c0956a';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Ears
+    const earOffsetX = 95 * squash;
+    ctx.beginPath();
+    ctx.ellipse(-earOffsetX, -70, 25, 40, -0.4, 0, Math.PI * 2);
+    ctx.fillStyle = '#a07850';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(earOffsetX, -70, 25, 40, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes — shift with rotation
+    const eyeShift = Math.sin(rad) * 30;
+    const eyeScale = Math.max(0.2, 1 - Math.abs(Math.sin(rad)) * 0.6);
+
+    // Left eye
+    ctx.beginPath();
+    ctx.ellipse(-38 + eyeShift * 0.5, -20, 18 * eyeScale, 20, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a0a00';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-38 + eyeShift * 0.5, -20, 7 * eyeScale, 8, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#3d1f00';
+    ctx.fill();
+    // Eye shine
+    ctx.beginPath();
+    ctx.ellipse(-34 + eyeShift * 0.5, -25, 4 * eyeScale, 4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fill();
+
+    // Right eye
+    const rightEyeScale = Math.max(0.05, 1 - Math.abs(Math.sin(rad)) * 0.85);
+    ctx.beginPath();
+    ctx.ellipse(38 + eyeShift * 0.5, -20, 18 * rightEyeScale, 20, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a0a00';
+    ctx.fill();
+    if (rightEyeScale > 0.2) {
+      ctx.beginPath();
+      ctx.ellipse(42 + eyeShift * 0.5, -25, 4 * rightEyeScale, 4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fill();
+    }
+
+    // Nose
+    const noseX = Math.sin(rad) * 20;
+    ctx.beginPath();
+    ctx.ellipse(noseX, 20, 18, 12, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#8b4513';
+    ctx.fill();
+
+    // Nostrils
+    ctx.beginPath();
+    ctx.ellipse(noseX - 6, 22, 5, 4, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#3d1f00';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(noseX + 6, 22, 5, 4, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Angle indicator
+    ctx.fillStyle = 'rgba(167,139,250,0.6)';
+    ctx.font = '13px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(angle) + '°', w - 16, h - 14);
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  let animFrame;
+  function animate() {
+    currentAngle = lerp(currentAngle, targetAngle, 0.12);
+    drawPetFrame(currentAngle);
+    animFrame = requestAnimationFrame(animate);
+  }
+  animate();
+
+  // Mouse drag
+  canvas.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; hint.style.opacity = '0'; });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastX;
+    targetAngle = Math.max(-85, Math.min(85, targetAngle + dx * 0.5));
+    lastX = e.clientX;
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+
+  // Touch
+  canvas.addEventListener('touchstart', e => { isDragging = true; lastX = e.touches[0].clientX; hint.style.opacity = '0'; }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const dx = e.touches[0].clientX - lastX;
+    targetAngle = Math.max(-85, Math.min(85, targetAngle + dx * 0.5));
+    lastX = e.touches[0].clientX;
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => { isDragging = false; });
+
+  // Gyroscope (mobile)
+  function requestGyro() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(state => {
+        if (state === 'granted') startGyro();
+      }).catch(() => {});
+    } else {
+      startGyro();
+    }
+  }
+  function startGyro() {
+    window.addEventListener('deviceorientation', e => {
+      if (e.gamma == null) return;
+      targetAngle = Math.max(-85, Math.min(85, e.gamma));
+    });
+  }
+  // Request gyro on first touch of canvas
+  canvas.addEventListener('touchstart', requestGyro, { once: true });
+})();
+</script>
+</body>
+</html>
